@@ -1,6 +1,7 @@
 mod mappings;
 
 mod alacritty;
+pub mod orkesto;
 mod pty_info;
 pub mod terminal_settings;
 
@@ -1059,6 +1060,7 @@ impl TerminalBuilder {
             #[cfg(windows)]
             shell_program: None,
             activation_script: Vec::new(),
+            orkesto_key: None,
             template: CopyTemplate {
                 shell: Shell::System,
                 env: HashMap::default(),
@@ -1105,7 +1107,7 @@ impl TerminalBuilder {
         is_remote_terminal: bool,
         window_id: u64,
         cx: &App,
-        activation_script: Vec<String>,
+        mut activation_script: Vec<String>,
         path_style: PathStyle,
     ) -> Task<Result<TerminalBuilder>> {
         let version = release_channel::AppVersion::global(cx);
@@ -1191,6 +1193,39 @@ impl TerminalBuilder {
             };
             let terminal_title_override =
                 shell_params.as_ref().and_then(|e| e.title_override.clone());
+
+            // Orkesto: a local interactive shell runs on the Host, through orkesto-attach.
+            let mut shell_params = shell_params;
+            let mut orkesto_key = None;
+            let restore_key = env.remove(orkesto::RESTORE_KEY_ENV);
+            if let Some(hooks) = orkesto::hooks()
+                && task.is_none()
+                && completion_tx.is_none()
+                && !is_remote_terminal
+                && !no_pty
+            {
+                if let Some(key) = restore_key {
+                    env.insert(orkesto::RESTORE_KEY_ENV.to_string(), key);
+                }
+                let (program, args) = match &shell_params {
+                    Some(params) => (params.program.clone(), params.args.clone().unwrap_or_default()),
+                    None => (util::shell::get_system_shell(), vec!["-l".to_string()]),
+                };
+                if let Some(wrapped) =
+                    hooks.wrap(working_directory.as_deref(), &program, &args, &mut env)
+                {
+                    if wrapped.restored {
+                        activation_script.clear();
+                    }
+                    orkesto_key = Some(wrapped.key);
+                    shell_params = Some(ShellParams::new(
+                        wrapped.program,
+                        Some(wrapped.args),
+                        terminal_title_override.clone(),
+                    ));
+                }
+                env.remove(orkesto::RESTORE_KEY_ENV);
+            }
 
             #[cfg(windows)]
             let shell_program = shell_params.as_ref().map(|params| {
@@ -1299,7 +1334,8 @@ impl TerminalBuilder {
                     }
                 };
 
-                let pty_info = PtyProcessInfo::new(ProcessIdGetter::from(&pty));
+                let pty_info =
+                    PtyProcessInfo::new(ProcessIdGetter::from(&pty).with_orkesto_key(orkesto_key));
 
                 //And connect them together
                 let pty_tx =
@@ -1349,6 +1385,7 @@ impl TerminalBuilder {
                 #[cfg(windows)]
                 shell_program,
                 activation_script: activation_script.clone(),
+                orkesto_key,
                 template: CopyTemplate {
                     shell,
                     env,
@@ -1556,6 +1593,8 @@ pub struct Terminal {
     shell_program: Option<String>,
     template: CopyTemplate,
     activation_script: Vec<String>,
+    /// Orkesto: the Host terminal this one shows (spikes/zed-reattach).
+    orkesto_key: Option<u64>,
     child_exited: Option<ExitStatus>,
     keyboard_input_sent: bool,
     init_command_startup_marker: Option<String>,
@@ -3165,6 +3204,11 @@ impl Terminal {
                 info.kill_child_process();
             })
             .detach();
+    }
+
+    /// Orkesto: the Host terminal this one shows, if any.
+    pub fn orkesto_key(&self) -> Option<u64> {
+        self.orkesto_key
     }
 
     pub fn pid(&self) -> Option<sysinfo::Pid> {

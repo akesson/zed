@@ -287,7 +287,17 @@ impl Project {
         cwd: Option<PathBuf>,
         cx: &mut Context<Self>,
     ) -> Task<Result<Entity<Terminal>>> {
-        self.create_terminal_shell_internal(cwd, false, cx)
+        self.create_terminal_shell_internal(cwd, false, None, cx)
+    }
+
+    /// Orkesto: a shell terminal that reattaches to the Host terminal `key` (spikes/zed-reattach).
+    pub fn create_terminal_shell_with_key(
+        &mut self,
+        cwd: Option<PathBuf>,
+        key: Option<u64>,
+        cx: &mut Context<Self>,
+    ) -> Task<Result<Entity<Terminal>>> {
+        self.create_terminal_shell_internal(cwd, false, key, cx)
     }
 
     /// Creates a local terminal even if the project is remote.
@@ -304,7 +314,7 @@ impl Project {
             // Local project: use project directory like normal terminals
             self.active_project_directory(cx).map(|p| p.to_path_buf())
         };
-        self.create_terminal_shell_internal(working_directory, true, cx)
+        self.create_terminal_shell_internal(working_directory, true, None, cx)
     }
 
     /// Internal method for creating terminal shells.
@@ -314,6 +324,7 @@ impl Project {
         &mut self,
         cwd: Option<PathBuf>,
         force_local: bool,
+        orkesto_key: Option<u64>,
         cx: &mut Context<Self>,
     ) -> Task<Result<Entity<Terminal>>> {
         let path = cwd.map(|p| Arc::from(&*p));
@@ -404,6 +415,9 @@ impl Project {
             let shell_kind = ShellKind::new(&shell_program, path_style.is_windows());
             let mut env = env_task.await.unwrap_or_default();
             env.extend(settings.env);
+            if let Some(key) = orkesto_key {
+                env.insert(terminal::orkesto::RESTORE_KEY_ENV.to_string(), key.to_string());
+            }
 
             let activation_script = maybe!(async {
                 for toolchain in toolchains {

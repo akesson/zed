@@ -1930,6 +1930,15 @@ impl Item for TerminalView {
         })
     }
 
+    fn on_removed(&self, cx: &mut Context<Self>) {
+        // Orkesto: closed (end the Host shell) or moved to another pane (keep it).
+        if let (Some(key), Some(hooks)) =
+            (self.terminal.read(cx).orkesto_key(), terminal::orkesto::hooks())
+        {
+            hooks.removed(key, self.terminal.downgrade(), cx);
+        }
+    }
+
     fn is_dirty(&self, cx: &App) -> bool {
         match self.terminal.read(cx).task() {
             Some(task) => task.status == TaskStatus::Running,
@@ -2024,6 +2033,14 @@ impl SerializableItem for TerminalView {
         if terminal.task().is_some() {
             return None;
         }
+        // Orkesto: remember which Host terminal this item shows (every pass: item ids change
+        // when the workspace is restored).
+        if let (Some(key), Some(workspace_id), Some(hooks)) =
+            (terminal.orkesto_key(), self.workspace_id, terminal::orkesto::hooks())
+        {
+            hooks.save(i64::from(workspace_id), item_id, key, cx);
+        }
+        let terminal = self.terminal().read(cx);
 
         if !self.needs_serialize {
             return None;
@@ -2059,6 +2076,13 @@ impl SerializableItem for TerminalView {
         cx: &mut App,
     ) -> Task<anyhow::Result<Entity<Self>>> {
         window.spawn(cx, async move |cx| {
+            let orkesto_key = cx
+                .update(|_window, cx| {
+                    terminal::orkesto::hooks()
+                        .and_then(|hooks| hooks.load(i64::from(workspace_id), item_id, cx))
+                })
+                .ok()
+                .flatten();
             let (cwd, custom_title) = cx
                 .update(|_window, cx| {
                     let db = TerminalDb::global(cx);
@@ -2087,7 +2111,9 @@ impl SerializableItem for TerminalView {
                 .unwrap_or((None, None));
 
             let terminal = project
-                .update(cx, |project, cx| project.create_terminal_shell(cwd, cx))
+                .update(cx, |project, cx| {
+                    project.create_terminal_shell_with_key(cwd, orkesto_key, cx)
+                })
                 .await?;
             cx.update(|window, cx| {
                 cx.new(|cx| {

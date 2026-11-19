@@ -13,6 +13,8 @@ use crate::{Event, Terminal};
 pub struct ProcessIdGetter {
     handle: i32,
     fallback_pid: u32,
+    /// Orkesto: the PTY's child is orkesto-attach; the shell runs on the Host.
+    orkesto_key: Option<u64>,
 }
 
 impl ProcessIdGetter {
@@ -20,7 +22,13 @@ impl ProcessIdGetter {
         ProcessIdGetter {
             handle,
             fallback_pid,
+            orkesto_key: None,
         }
+    }
+
+    pub(crate) fn with_orkesto_key(mut self, key: Option<u64>) -> Self {
+        self.orkesto_key = key;
+        self
     }
 
     pub fn fallback_pid(&self) -> Pid {
@@ -31,6 +39,12 @@ impl ProcessIdGetter {
 #[cfg(unix)]
 impl ProcessIdGetter {
     fn pid(&self) -> Option<Pid> {
+        // Orkesto: report the real shell's foreground process, not orkesto-attach.
+        if let Some(key) = self.orkesto_key
+            && let Some(pid) = crate::orkesto::hooks().and_then(|hooks| hooks.foreground_pid(key))
+        {
+            return Some(Pid::from_u32(pid));
+        }
         // Negative pid means error.
         // Zero pid means no foreground process group is set on the PTY yet.
         // Avoid killing the current process by returning a zero pid.
