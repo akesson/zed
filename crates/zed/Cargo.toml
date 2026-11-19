@@ -6,7 +6,7 @@ version = "1.31.0"
 publish.workspace = true
 license = "GPL-3.0-or-later"
 authors = ["Zed Team <hi@zed.dev>"]
-default-run = "zed"
+default-run = "orkesto"
 
 [lints]
 workspace = true
@@ -55,7 +55,8 @@ visual-tests = [
 ]
 
 [[bin]]
-name = "zed"
+# Orkesto: must match paths::APP_NAME (checked at compile time).
+name = "orkesto"
 path = "src/main.rs"
 
 [[bin]]
@@ -208,6 +209,8 @@ tasks_ui.workspace = true
 telemetry.workspace = true
 telemetry_events.workspace = true
 terminal_view.workspace = true
+# Orkesto: the app crate, in the orkesto repo that holds this fork as its `zed/` submodule.
+orkesto_zed = { path = "../../../crates/app/orkesto_zed" }
 theme.workspace = true
 theme_extension.workspace = true
 theme_selector.workspace = true

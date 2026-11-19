@@ -221,6 +221,9 @@ fn main() {
     #[cfg(unix)]
     util::prevent_root_execution();
 
+    // Orkesto: CEF loads its framework and handles its subprocess args before anything else.
+    orkesto_zed::pre_main();
+
     let args = Args::parse();
 
     // `zed --askpass` Makes zed operate in nc/netcat mode for use with askpass
@@ -774,6 +777,7 @@ fn main() {
         });
         vim::init(cx);
         terminal_view::init(cx);
+        orkesto_zed::init(cx);
         journal::init(app_state.clone(), cx);
         encoding_selector::init(cx);
         language_selector::init(cx);
