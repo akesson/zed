@@ -357,6 +357,9 @@ fn main() {
         .with_assets(Assets)
         .with_restart_arguments(restart_arguments);
 
+    // Orkesto: one app per data dir and per Host, before the database and the session id.
+    orkesto_zed::ensure_single();
+
     let app_db = db::AppDatabase::new();
     let system_id = app.background_executor().spawn(system_id());
     let installation_id = app

@@ -1809,10 +1809,16 @@ fn quit(_: &Quit, cx: &mut App) {
             }
         }
 
+        // Orkesto: keep or stop terminals that run a job (applied once the save prompts pass).
+        let Some(orkesto_choice) = orkesto_zed::quit_prompt(&workspace_windows, cx).await else {
+            return Ok(());
+        };
+
         if !workspace::prepare_windows_to_quit(&workspace_windows, cx).await {
             return Ok(());
         }
 
+        orkesto_choice.apply();
         cx.update(|cx| cx.quit());
         anyhow::Ok(())
     })
