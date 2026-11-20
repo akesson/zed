@@ -575,6 +575,12 @@ impl AutoUpdater {
         self.status.clone()
     }
 
+    /// Orkesto: set the status from outside (its own update source drives the title bar button).
+    pub fn set_status(&mut self, status: AutoUpdateStatus, cx: &mut Context<Self>) {
+        self.status = status;
+        cx.notify();
+    }
+
     pub fn dismissed_status(&self) -> Option<AutoUpdateStatus> {
         self.dismissed_status.clone()
     }
