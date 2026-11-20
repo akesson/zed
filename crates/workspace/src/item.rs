@@ -381,6 +381,12 @@ pub trait Item: Focusable + EventEmitter<Self::Event> + Render + Sized {
         false
     }
 
+    /// Orkesto: false keeps this item out of workspace serialization (it isn't restored), even
+    /// though its type is a registered `SerializableItem`.
+    fn orkesto_restorable(&self, _cx: &App) -> bool {
+        true
+    }
+
     fn include_in_nav_history() -> bool {
         true
     }
@@ -1157,6 +1163,9 @@ impl<T: Item> ItemHandle for Entity<T> {
     }
 
     fn to_serializable_item_handle(&self, cx: &App) -> Option<Box<dyn SerializableItemHandle>> {
+        if !self.read(cx).orkesto_restorable(cx) {
+            return None;
+        }
         SerializableItemRegistry::view_to_serializable_item_handle(self.to_any_view(), cx)
     }
 
