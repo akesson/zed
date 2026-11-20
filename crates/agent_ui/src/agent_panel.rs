@@ -150,6 +150,11 @@ fn terminal_program_to_report(
     program_to_report
 }
 
+/// Orkesto: where a terminal thread's Host shell key is stored.
+pub fn orkesto_terminal_name(terminal_id: TerminalId) -> String {
+    format!("agent-terminal/{}", terminal_id.to_key_string())
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct TerminalId(uuid::Uuid);
 
@@ -1131,6 +1136,8 @@ pub struct AgentPanel {
     retained_threads: HashMap<ThreadId, Entity<ConversationView>>,
     terminals: HashMap<TerminalId, AgentTerminal>,
     pending_terminal_spawn: Option<TerminalId>,
+    /// Orkesto: the Host shell key the next spawn of this terminal id attaches to.
+    orkesto_adopt: Option<(TerminalId, u64)>,
     #[cfg(test)]
     test_terminal_spawn_gate: Option<futures::channel::oneshot::Receiver<()>>,
     new_thread_menu_handle: PopoverMenuHandle<ContextMenu>,
@@ -1552,6 +1559,7 @@ impl AgentPanel {
             retained_threads: HashMap::default(),
             terminals: HashMap::default(),
             pending_terminal_spawn: None,
+            orkesto_adopt: None,
             #[cfg(test)]
             test_terminal_spawn_gate: None,
             new_thread_menu_handle: PopoverMenuHandle::default(),
@@ -2057,7 +2065,9 @@ impl AgentPanel {
         self.pending_terminal_spawn = Some(terminal_id);
         let terminal_working_directory = working_directory.clone();
         let init_command = Self::terminal_init_command(run_init_command, cx);
-        let terminal_task = self.create_terminal_shell(working_directory, cx);
+        // Orkesto: the Host shell to attach to: an adopted one, or a restored thread's own.
+        let orkesto_key = self.orkesto_key_for(terminal_id, cx);
+        let terminal_task = self.create_terminal_shell(working_directory, orkesto_key, cx);
         let workspace = self.workspace.clone();
         let workspace_id = self.workspace_id;
         let project = self.project.downgrade();
@@ -2081,6 +2091,12 @@ impl AgentPanel {
                 }
             };
             this.update_in(cx, |this, window, cx| {
+                // Orkesto: remember this thread's Host shell, to reattach it after a restart.
+                if let (Some(key), Some(hooks)) =
+                    (terminal.read(cx).orkesto_key(), terminal::orkesto::hooks())
+                {
+                    hooks.save_named(&orkesto_terminal_name(terminal_id), key, cx);
+                }
                 let terminal_for_init_command = terminal.clone();
                 let terminal_view = cx.new(|cx| {
                     let mut view =
@@ -2101,6 +2117,11 @@ impl AgentPanel {
                     window,
                     cx,
                 );
+                // Orkesto: reattached to a running shell (its key was kept): don't type the init
+                // command into whatever runs there.
+                let reattached =
+                    orkesto_key.is_some() && terminal_for_init_command.read(cx).orkesto_key() == orkesto_key;
+                let init_command = init_command.filter(|_| !reattached);
                 Self::write_terminal_init_command(&terminal_for_init_command, init_command, cx);
             })?;
             anyhow::Ok(())
@@ -2108,9 +2129,53 @@ impl AgentPanel {
         .detach_and_log_err(cx);
     }
 
+    /// Orkesto: show a running Host shell (by its key) as a new terminal thread, e.g. one a
+    /// restart left without a view. Like a new terminal, minus the init command. False if this
+    /// panel can't have terminals (e.g. no project).
+    pub fn orkesto_adopt_terminal(
+        &mut self,
+        key: u64,
+        working_directory: Option<PathBuf>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !self.supports_terminal(cx) {
+            return false;
+        }
+        let terminal_id = TerminalId::new();
+        self.orkesto_adopt = Some((terminal_id, key));
+        self.spawn_terminal(
+            terminal_id,
+            working_directory,
+            None,
+            None,
+            None,
+            true,
+            true,
+            false,
+            AgentThreadSource::AgentPanel,
+            window,
+            cx,
+        );
+        true
+    }
+
+    /// Orkesto: an adopted shell's key, or the one stored for this thread (None: a new shell).
+    fn orkesto_key_for(&mut self, terminal_id: TerminalId, cx: &mut Context<Self>) -> Option<u64> {
+        let adopted = self
+            .orkesto_adopt
+            .take_if(|(id, _)| *id == terminal_id)
+            .map(|(_, key)| key);
+        adopted.or_else(|| {
+            terminal::orkesto::hooks()
+                .and_then(|hooks| hooks.load_named(&orkesto_terminal_name(terminal_id), cx))
+        })
+    }
+
     fn create_terminal_shell(
         &mut self,
         working_directory: Option<PathBuf>,
+        orkesto_key: Option<u64>,
         cx: &mut Context<Self>,
     ) -> Task<Result<Entity<terminal::Terminal>>> {
         // A real shell ties the spawn's timing to the host, so a test that needs
@@ -2125,7 +2190,7 @@ impl AgentPanel {
         }
 
         self.project.update(cx, |project, cx| {
-            project.create_terminal_shell(working_directory, cx)
+            project.create_terminal_shell_with_key(working_directory, orkesto_key, cx)
         })
     }
 

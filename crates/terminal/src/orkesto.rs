@@ -37,6 +37,16 @@ pub trait Hooks: Send + Sync + 'static {
     fn load(&self, workspace_id: i64, item_id: u64, cx: &mut App) -> Option<u64>;
     /// The terminal's item was removed from a pane: closed, or moved to another pane.
     fn removed(&self, key: u64, terminal: WeakEntity<Terminal>, cx: &mut App);
+    /// Terminals outside panes (the agent panel's): persist `key` under a stable `name`.
+    fn save_named(&self, _name: &str, _key: u64, _cx: &mut App) {}
+    /// The key stored under `name`, if any.
+    fn load_named(&self, _name: &str, _cx: &mut App) -> Option<u64> {
+        None
+    }
+    /// A terminal outside panes was closed for good (no move possible): end its shell.
+    fn closed(&self, _key: u64) {}
+    /// Drop what's stored under `name` (its terminal was closed).
+    fn forget_named(&self, _name: &str, _cx: &mut App) {}
 }
 
 static HOOKS: OnceLock<Box<dyn Hooks>> = OnceLock::new();

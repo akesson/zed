@@ -373,6 +373,14 @@ impl TerminalThreadMetadataStore {
 
     pub fn delete(&mut self, terminal_id: TerminalId, cx: &mut Context<Self>) {
         if let Some(terminal) = self.terminals.remove(&terminal_id) {
+            // Orkesto: the thread is closed for good (open or not): end its Host shell.
+            if let Some(hooks) = terminal::orkesto::hooks() {
+                let name = crate::agent_panel::orkesto_terminal_name(terminal_id);
+                if let Some(key) = hooks.load_named(&name, cx) {
+                    hooks.closed(key);
+                }
+                hooks.forget_named(&name, cx);
+            }
             if let Some(ids) = self.terminals_by_paths.get_mut(terminal.folder_paths()) {
                 ids.remove(&terminal_id);
             }
