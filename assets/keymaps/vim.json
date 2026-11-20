@@ -995,7 +995,7 @@
     },
   },
   {
-    "context": "!Editor && !Terminal",
+    "context": "!Editor && !Terminal && !CefTab", // Orkesto: typing in a Browser tab
     "bindings": {
       ":": "command_palette::Toggle",
       "g /": "pane::DeploySearch",
