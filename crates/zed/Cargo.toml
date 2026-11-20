@@ -54,6 +54,12 @@ visual-tests = [
     "title_bar/test-support",
 ]
 
+# Orkesto: also a library, so the Orkesto workspace can build the app (crates/app/orkesto_bin calls
+# `zed::main()`) without using this workspace's Cargo.toml/Cargo.lock.
+[lib]
+path = "src/main.rs"
+doctest = false
+
 [[bin]]
 # Orkesto: must match paths::APP_NAME (checked at compile time).
 name = "orkesto"

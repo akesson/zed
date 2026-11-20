@@ -7,13 +7,16 @@ mod zed;
 
 // Ensure the binary name stays in sync with APP_NAME so that the paths used
 // at runtime (data dir, config dir, etc.) match what the binary is called.
-const _: () = assert!(
-    paths::APP_NAME_LOWERCASE
-        .as_bytes()
-        .eq_ignore_ascii_case(env!("CARGO_BIN_NAME").as_bytes()),
-    "paths::APP_NAME_LOWERCASE must match the binary name. \
-     Forks: update APP_NAME in crates/paths/src/paths.rs when renaming the binary.",
-);
+// Orkesto: `option_env!`, as this file is also the crate's lib target (no CARGO_BIN_NAME there).
+const _: () = if let Some(bin) = option_env!("CARGO_BIN_NAME") {
+    assert!(
+        paths::APP_NAME_LOWERCASE
+            .as_bytes()
+            .eq_ignore_ascii_case(bin.as_bytes()),
+        "paths::APP_NAME_LOWERCASE must match the binary name. \
+         Forks: update APP_NAME in crates/paths/src/paths.rs when renaming the binary.",
+    );
+};
 
 use agent_ui::AgentPanel;
 use anyhow::{Context as _, Result};
@@ -207,7 +210,8 @@ fn fail_to_open_window(e: anyhow::Error, _cx: &mut App) {
 }
 static STARTUP_TIME: OnceLock<Instant> = OnceLock::new();
 
-fn main() {
+// Orkesto: pub, called from crates/app/orkesto_bin.
+pub fn main() {
     STARTUP_TIME.get_or_init(|| Instant::now());
 
     // If this process was re-executed as a Linux sandbox helper, run that mode
