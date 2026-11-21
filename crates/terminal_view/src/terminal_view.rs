@@ -85,13 +85,12 @@ pub struct ScrollTerminal(pub i32);
 /// Sends the specified text directly to the terminal.
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Action)]
 #[action(namespace = terminal)]
-// Orkesto (zed-fork spike): pub, so other terminal views can handle these actions too.
-pub struct SendText(pub String);
+pub struct SendText(String);
 
 /// Sends a keystroke sequence to the terminal.
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Action)]
 #[action(namespace = terminal)]
-pub struct SendKeystroke(pub String);
+pub struct SendKeystroke(String);
 
 actions!(
     terminal,
