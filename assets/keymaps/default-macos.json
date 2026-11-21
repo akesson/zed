@@ -1824,26 +1824,4 @@
       "escape": "tabular_data::ClearSelection",
     },
   },
-  // Orkesto: the Browser tab (crates/app/tab_cef). `CefTab` holds the toolbar and the page,
-  // `CefBrowser` is the page.
-  {
-    "context": "CefTab",
-    "bindings": {
-      "cmd-l": "cef_tab::FocusLocation",
-      "cmd-r": "cef_tab::Reload",
-      "cmd-[": "cef_tab::GoBack",
-      "cmd-]": "cef_tab::GoForward",
-    },
-  },
-  {
-    "context": "CefBrowser",
-    "bindings": {
-      "cmd-c": "cef_browser::Copy",
-      "cmd-x": "cef_browser::Cut",
-      "cmd-v": "cef_browser::Paste",
-      "cmd-a": "cef_browser::SelectAll",
-      "cmd-z": "cef_browser::Undo",
-      "cmd-shift-z": "cef_browser::Redo",
-    },
-  },
 ]

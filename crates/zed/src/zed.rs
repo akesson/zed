@@ -2391,6 +2391,9 @@ pub fn load_default_keymap(cx: &mut App) {
         ));
     }
 
+    // Orkesto: its own default bindings (crates/app/orkesto_zed/keymap.json).
+    cx.bind_keys(orkesto_zed::key_bindings(cx));
+
     cx.bind_keys(
         KeymapFile::load_asset(
             SPECIFIC_OVERRIDES_KEYMAP_PATH,
