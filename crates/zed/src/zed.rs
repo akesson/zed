@@ -2369,6 +2369,8 @@ fn reload_keymaps(cx: &mut App, mut user_key_bindings: Vec<KeyBinding>) {
 pub fn load_default_keymap(cx: &mut App) {
     let base_keymap = *BaseKeymap::get_global(cx);
     if base_keymap == BaseKeymap::None {
+        // Orkesto: its own bindings load whatever the base keymap.
+        cx.bind_keys(orkesto_zed::key_bindings(cx));
         return;
     }
 
@@ -2391,7 +2393,8 @@ pub fn load_default_keymap(cx: &mut App) {
         ));
     }
 
-    // Orkesto: its own default bindings (crates/app/orkesto_zed/keymap.json).
+    // Orkesto: its own bindings (crates/app/orkesto_zed/keymap.json), after Zed's: a context-free
+    // binding ties with one on the focused element, and the later one wins.
     cx.bind_keys(orkesto_zed::key_bindings(cx));
 
     cx.bind_keys(

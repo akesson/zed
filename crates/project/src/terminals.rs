@@ -416,7 +416,8 @@ impl Project {
             let shell_kind = ShellKind::new(&shell_program, path_style.is_windows());
             let mut env = env_task.await.unwrap_or_default();
             env.extend(settings.env);
-            if let Some(restore) = orkesto_restore {
+            // Only local shells run on the Host: a remote shell would see this in its env.
+            if let Some(restore) = orkesto_restore.filter(|_| !is_via_remote) {
                 env.insert(terminal::orkesto::RESTORE_ENV.to_string(), restore.encode());
             }
 
