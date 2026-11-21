@@ -607,7 +607,10 @@ pub fn main() {
         Client::set_global(client.clone(), cx);
 
         zed::init(cx);
-        #[cfg(target_os = "macos")]
+        // Orkesto: no "Move Zed to Applications?" prompt. scripts/install.sh installs the app, and
+        // Zed's check takes any app under /Volumes for a disk image, so dev builds on another drive
+        // were asked at every start.
+        #[cfg(any())]
         zed::move_to_applications::init(cx);
         project::Project::init(&client, cx);
         debugger_ui::init(cx);
