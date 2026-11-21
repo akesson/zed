@@ -1061,6 +1061,7 @@ impl TerminalBuilder {
             shell_program: None,
             activation_script: Vec::new(),
             orkesto_key: None,
+            orkesto_restored: false,
             template: CopyTemplate {
                 shell: Shell::System,
                 env: HashMap::default(),
@@ -1197,34 +1198,32 @@ impl TerminalBuilder {
             // Orkesto: a local interactive shell runs on the Host, through orkesto-attach.
             let mut shell_params = shell_params;
             let mut orkesto_key = None;
-            let restore_key = env.remove(orkesto::RESTORE_KEY_ENV);
+            let mut orkesto_restored = false;
+            let restore = env.remove(orkesto::RESTORE_ENV).and_then(|v| orkesto::Restore::decode(&v));
             if let Some(hooks) = orkesto::hooks()
                 && task.is_none()
                 && completion_tx.is_none()
                 && !is_remote_terminal
                 && !no_pty
             {
-                if let Some(key) = restore_key {
-                    env.insert(orkesto::RESTORE_KEY_ENV.to_string(), key);
-                }
                 let (program, args) = match &shell_params {
                     Some(params) => (params.program.clone(), params.args.clone().unwrap_or_default()),
                     None => (util::shell::get_system_shell(), vec!["-l".to_string()]),
                 };
                 if let Some(wrapped) =
-                    hooks.wrap(working_directory.as_deref(), &program, &args, &mut env)
+                    hooks.wrap(working_directory.as_deref(), &program, &args, restore, &mut env)
                 {
                     if wrapped.restored {
                         activation_script.clear();
                     }
                     orkesto_key = Some(wrapped.key);
+                    orkesto_restored = wrapped.restored;
                     shell_params = Some(ShellParams::new(
                         wrapped.program,
                         Some(wrapped.args),
                         terminal_title_override.clone(),
                     ));
                 }
-                env.remove(orkesto::RESTORE_KEY_ENV);
             }
 
             #[cfg(windows)]
@@ -1386,6 +1385,7 @@ impl TerminalBuilder {
                 shell_program,
                 activation_script: activation_script.clone(),
                 orkesto_key,
+                orkesto_restored,
                 template: CopyTemplate {
                     shell,
                     env,
@@ -1595,6 +1595,8 @@ pub struct Terminal {
     activation_script: Vec<String>,
     /// Orkesto: the Host terminal this one shows (spikes/zed-reattach).
     orkesto_key: Option<u64>,
+    /// Orkesto: it reattached to a shell that was already running.
+    orkesto_restored: bool,
     child_exited: Option<ExitStatus>,
     keyboard_input_sent: bool,
     init_command_startup_marker: Option<String>,
@@ -3209,6 +3211,11 @@ impl Terminal {
     /// Orkesto: the Host terminal this one shows, if any.
     pub fn orkesto_key(&self) -> Option<u64> {
         self.orkesto_key
+    }
+
+    /// Orkesto: true if it reattached to a running Host shell (don't type init commands into it).
+    pub fn orkesto_restored(&self) -> bool {
+        self.orkesto_restored
     }
 
     pub fn pid(&self) -> Option<sysinfo::Pid> {

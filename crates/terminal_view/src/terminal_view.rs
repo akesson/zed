@@ -2112,7 +2112,8 @@ impl SerializableItem for TerminalView {
 
             let terminal = project
                 .update(cx, |project, cx| {
-                    project.create_terminal_shell_with_key(cwd, orkesto_key, cx)
+                    let restore = orkesto_key.map(terminal::orkesto::Restore::Key);
+                    project.create_terminal_shell_restoring(cwd, restore, cx)
                 })
                 .await?;
             cx.update(|window, cx| {

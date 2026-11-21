@@ -290,14 +290,15 @@ impl Project {
         self.create_terminal_shell_internal(cwd, false, None, cx)
     }
 
-    /// Orkesto: a shell terminal that reattaches to the Host terminal `key` (spikes/zed-reattach).
-    pub fn create_terminal_shell_with_key(
+    /// Orkesto: a shell terminal that reattaches to the Host shell `restore` names, if it still
+    /// runs (spikes/zed-reattach).
+    pub fn create_terminal_shell_restoring(
         &mut self,
         cwd: Option<PathBuf>,
-        key: Option<u64>,
+        restore: Option<terminal::orkesto::Restore>,
         cx: &mut Context<Self>,
     ) -> Task<Result<Entity<Terminal>>> {
-        self.create_terminal_shell_internal(cwd, false, key, cx)
+        self.create_terminal_shell_internal(cwd, false, restore, cx)
     }
 
     /// Creates a local terminal even if the project is remote.
@@ -324,7 +325,7 @@ impl Project {
         &mut self,
         cwd: Option<PathBuf>,
         force_local: bool,
-        orkesto_key: Option<u64>,
+        orkesto_restore: Option<terminal::orkesto::Restore>,
         cx: &mut Context<Self>,
     ) -> Task<Result<Entity<Terminal>>> {
         let path = cwd.map(|p| Arc::from(&*p));
@@ -415,8 +416,8 @@ impl Project {
             let shell_kind = ShellKind::new(&shell_program, path_style.is_windows());
             let mut env = env_task.await.unwrap_or_default();
             env.extend(settings.env);
-            if let Some(key) = orkesto_key {
-                env.insert(terminal::orkesto::RESTORE_KEY_ENV.to_string(), key.to_string());
+            if let Some(restore) = orkesto_restore {
+                env.insert(terminal::orkesto::RESTORE_ENV.to_string(), restore.encode());
             }
 
             let activation_script = maybe!(async {

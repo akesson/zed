@@ -7,8 +7,35 @@ use gpui::{App, WeakEntity};
 use collections::HashMap;
 use std::{path::Path, sync::OnceLock};
 
-/// Env var in `Project::create_terminal_shell_with_key`'s env: the key of a terminal to restore.
-pub const RESTORE_KEY_ENV: &str = "ORKESTO_TERMINAL_KEY";
+/// Env var in `Project::create_terminal_shell_restoring`'s env: a [`Restore`], encoded. The
+/// terminal builder takes it out and hands it to [`Hooks::wrap`]; the shell never sees it.
+pub const RESTORE_ENV: &str = "ORKESTO_TERMINAL_RESTORE";
+
+/// Which Host shell a new terminal should show, if it still runs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Restore {
+    /// The shell with this key (a pane's terminal: the key was saved with its item).
+    Key(u64),
+    /// The shell whose key `orkesto_zed` stores under this name (an agent panel terminal thread).
+    /// The hooks keep the name pointing at the shell the terminal ends up showing.
+    Name(String),
+}
+
+impl Restore {
+    pub fn encode(&self) -> String {
+        match self {
+            Restore::Key(key) => format!("key:{key}"),
+            Restore::Name(name) => format!("name:{name}"),
+        }
+    }
+
+    pub fn decode(value: &str) -> Option<Self> {
+        if let Some(key) = value.strip_prefix("key:") {
+            return key.parse().ok().map(Restore::Key);
+        }
+        value.strip_prefix("name:").map(|name| Restore::Name(name.to_string()))
+    }
+}
 
 /// What runs instead of the shell.
 pub struct Wrapped {
@@ -20,13 +47,14 @@ pub struct Wrapped {
 }
 
 pub trait Hooks: Send + Sync + 'static {
-    /// A local, interactive shell terminal is about to run `program args` in `cwd` with `env`.
-    /// `env` may carry [`RESTORE_KEY_ENV`].
+    /// A local, interactive shell terminal is about to run `program args` in `cwd` with `env`,
+    /// showing the shell `restore` names if it still runs.
     fn wrap(
         &self,
         cwd: Option<&Path>,
         program: &str,
         args: &[String],
+        restore: Option<Restore>,
         env: &mut HashMap<String, String>,
     ) -> Option<Wrapped>;
     /// The foreground process group of the real shell behind `key` (for titles and cwd).
@@ -58,3 +86,4 @@ pub fn set_hooks(hooks: impl Hooks) {
 pub fn hooks() -> Option<&'static dyn Hooks> {
     HOOKS.get().map(|hooks| hooks.as_ref())
 }
+
