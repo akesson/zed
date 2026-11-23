@@ -65,6 +65,8 @@ pub struct ThreadItem {
     on_hover: Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>,
     action_slot: Option<AnyElement>,
     base_bg: Option<Hsla>,
+    // Orkesto: a row under the title (its MR/PR chips).
+    extra_row: Option<AnyElement>,
 }
 
 impl ThreadItem {
@@ -99,6 +101,7 @@ impl ThreadItem {
             on_click: None,
             on_hover: Box::new(|_, _, _| {}),
             action_slot: None,
+            extra_row: None,
             base_bg: None,
         }
     }
@@ -240,6 +243,12 @@ impl ThreadItem {
 
     pub fn action_slot(mut self, element: impl IntoElement) -> Self {
         self.action_slot = Some(element.into_any_element());
+        self
+    }
+
+    /// Orkesto: a row between the title and the metadata line, starting at the title's x.
+    pub fn extra_row(mut self, element: impl IntoElement) -> Self {
+        self.extra_row = Some(element.into_any_element());
         self
     }
 
@@ -491,6 +500,15 @@ impl RenderOnce for ThreadItem {
                         })
                     }),
             )
+            // Orkesto: the extra row, indented like the metadata line.
+            .when_some(self.extra_row, |this, row| {
+                this.child(
+                    h_flex()
+                        .gap_1p5()
+                        .child(icon_container())
+                        .child(div().flex_1().min_w_0().child(row)),
+                )
+            })
             .when(has_metadata, |this| {
                 this.child(
                     h_flex()
