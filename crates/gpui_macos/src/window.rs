@@ -1157,7 +1157,9 @@ impl MacWindow {
             let native_view: *mut AnyObject = msg_send![native_view, initWithFrame: content_bounds];
             assert!(!native_view.is_null());
 
-            let metal_frames = MetalFrameSource::is_available().then(Rc::<MetalFrames>::default);
+            // Orkesto: in a VM, frames paced by the CVDisplayLink (see `use_cv_display_link`).
+            let metal_frames = (MetalFrameSource::is_available() && !use_cv_display_link())
+                .then(Rc::<MetalFrames>::default);
             let state = Rc::new(Mutex::new(MacWindowState {
                 handle,
                 foreground_executor,
@@ -3510,6 +3512,59 @@ extern "C" fn display_layer(this: &AnyObject, _: Sel, _: *mut AnyObject) {
         lock.renderer.set_presents_with_transaction(false);
         lock.start_display_link(&window_state);
     }
+}
+
+/// Orkesto: pace frames with the `CVDisplayLink` instead of a `CAMetalDisplayLink` (macOS 14+).
+///
+/// In a macOS virtual machine, frames drawn into a `CAMetalDisplayLink`'s drawables and presented
+/// on time reach the screen up to seconds late (a terminal's prompt shows long after it was
+/// drawn); the `CVDisplayLink` presents them at once. So: the `CVDisplayLink` in a VM, upstream's
+/// choice elsewhere. `ORKESTO_CV_DISPLAY_LINK=1` or `=0` decides instead.
+fn use_cv_display_link() -> bool {
+    static USE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *USE.get_or_init(|| {
+        let (cv, why) = match std::env::var("ORKESTO_CV_DISPLAY_LINK").as_deref() {
+            Ok("1") => (true, "ORKESTO_CV_DISPLAY_LINK=1"),
+            Ok("0") => (false, "ORKESTO_CV_DISPLAY_LINK=0"),
+            _ if in_virtual_machine() => (true, "running in a virtual machine"),
+            _ => (false, "default"),
+        };
+        log::info!(
+            "frame pacing: {} ({why})",
+            if cv {
+                "CVDisplayLink"
+            } else {
+                "CAMetalDisplayLink"
+            }
+        );
+        cv
+    })
+}
+
+/// `kern.hv_vmm_present`: macOS runs under a hypervisor.
+fn in_virtual_machine() -> bool {
+    unsafe extern "C" {
+        fn sysctlbyname(
+            name: *const std::ffi::c_char,
+            oldp: *mut c_void,
+            oldlenp: *mut usize,
+            newp: *mut c_void,
+            newlen: usize,
+        ) -> std::ffi::c_int;
+    }
+    let mut value: std::ffi::c_int = 0;
+    let mut len = std::mem::size_of::<std::ffi::c_int>();
+    // SAFETY: `value` and `len` outlive the call, and `len` is `value`'s size.
+    let status = unsafe {
+        sysctlbyname(
+            c"kern.hv_vmm_present".as_ptr(),
+            (&raw mut value).cast(),
+            &mut len,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    status == 0 && value == 1
 }
 
 extern "C" fn step(view: *mut c_void) {
